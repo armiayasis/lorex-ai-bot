@@ -16,7 +16,7 @@ function convertToBold(text) {
 }
 
 module.exports.config = {
-  name: 'ai',
+  name: 'nova',
   version: '1.0.1',
   hasPermission: 0,
   usePrefix: false,
@@ -24,7 +24,7 @@ module.exports.config = {
   description: "An AI command powered by GPT-4o.",
   usages: "ai [prompt]",
   credits: 'LorexAi',
-  cooldowns: 3,
+  cooldowns: 1,
   dependencies: {
     "axios": ""
   }
@@ -73,7 +73,7 @@ module.exports.run = async function({ api, event, args }) {
 
   if (!input) {
     return api.sendMessage(
-      "Please provide a query or prompt to interact with 𝗟𝗼𝗿𝗲𝘅 𝗔𝗶.",
+      "👋Hey User My name is 𝗡𝗼𝘃𝗮 𝗔𝗶 how can i help you today?.",
       event.threadID,
       event.messageID
     );
