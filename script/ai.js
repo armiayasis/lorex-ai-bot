@@ -24,7 +24,7 @@ module.exports.config = {
   description: "An AI command powered by GPT-4o.",
   usages: "ai [prompt]",
   credits: 'LorexAi',
-  cooldowns: 1,
+  cooldowns: 0,
   dependencies: {
     "axios": ""
   }
