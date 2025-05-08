@@ -73,19 +73,18 @@ module.exports.run = async function({ api, event, args }) {
 
   if (!input) {
     return api.sendMessage(
-      "👋Hey User My name is 𝗡𝗼𝘃𝗮 𝗔𝗶 how can i help you today?.",
+      "👋Hey User My name is 𝗡𝗼𝘃𝗮 𝗔𝗶 how can i help you today?",
       event.threadID,
       event.messageID
     );
   }
 
-  api.sendMessage("🔄 Generating...", event.threadID, event.messageID);
+  api.sendMessage("🚀 Generating...", event.threadID, event.messageID);
 
   try {
-    const { data } = await axios.get('https://gpt.lorex-ai.com/api/gpt-4o', {
+    const { data } = await axios.get('https://rapido.zetsu.xyz/api/gpt4o-mini', {
       params: {
-        ask: input,
-        uid: uid,
+        prompt: input
       }
     });
 
@@ -103,6 +102,6 @@ module.exports.run = async function({ api, event, args }) {
 
   } catch (error) {
     console.error("⛔ Error processing request:", error.message || error);
-    return api.sendMessage("⛔ An error occurred while processing your request. Please try again.", event.threadID, event.messageID);
+    return api.sendMessage(error.message);
   }
 };
