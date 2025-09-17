@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// For bold conversion
+// Bold text conversion
 function convertToBold(text) {
   const boldMap = {
     'a': '𝗮','b': '𝗯','c': '𝗰','d': '𝗱','e': '𝗲','f': '𝗳','g': '𝗴','h': '𝗵','i': '𝗶','j': '𝗷',
@@ -10,39 +10,88 @@ function convertToBold(text) {
     'K': '𝗞','L': '𝗟','M': '𝗠','N': '𝗡','O': '𝗢','P': '𝗣','Q': '𝗤','R': '𝗥','S': '𝗦','T': '𝗧',
     'U': '𝗨','V': '𝗩','W': '𝗪','X': '𝗫','Y': '𝗬','Z': '𝗭',
   };
-  return text.split('').map(char => boldMap[char] || char).join('');
+  return text.split('').map(c => boldMap[c] || c).join('');
 }
 
 const responseOpeners = [
-  "🤖𝙂𝙋𝙏-5-𝘼𝙎𝙎𝙄𝙎𝙏𝘼𝙉𝙏"
+  "🤖𝙂𝙋𝙏 𝘼𝙎𝙎𝙄𝙎𝙏𝘼𝙉𝙏"
 ];
 
-// Usage limits: 9 uses per 24 hours
-const USAGE_LIMIT = 9;
-const RESET_TIME_MS = 24 * 60 * 60 * 1000; // 24 hours
+const ADMIN_UID = "61575137262643";
 
-// Stores usage and stats per user (in-memory)
-const userUsage = {};
-const userStats = {};
+const USAGE_LIMIT = 9;
+const MAX_USAGE = 10; // Ban at 10
+const BAN_DURATION = 9 * 60 * 60 * 1000; // 9 hours in ms
+const RESET_DURATION = 24 * 60 * 60 * 1000; // 24 hours in ms
+
+// In-memory usage & ban tracking
+const userUsage = {}; // { uid: { count, lastReset } }
+const userBans = {};  // { uid: banExpiresTimestamp }
 
 function getPHTime() {
-  // Returns current time in Philippines timezone (UTC+8)
-  const now = new Date();
-  // convert to UTC +8
-  const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const philippinesTime = new Date(utc + 8 * 3600000);
-  const hours = philippinesTime.getHours();
-  const minutes = philippinesTime.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
-  const minuteStr = minutes < 10 ? '0' + minutes : minutes;
-  return `${hour12}:${minuteStr} ${ampm}`;
+  return new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' });
 }
 
-function generateScoreBar(percent) {
-  const filledBlocks = Math.round(percent / 10);
-  const emptyBlocks = 10 - filledBlocks;
-  return '█'.repeat(filledBlocks) + '░'.repeat(emptyBlocks);
+function formatTime(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
+  return `${hours}h ${mins}m ${secs}s`;
+}
+
+function isUserBanned(uid) {
+  if (!userBans[uid]) return false;
+  if (Date.now() > userBans[uid]) {
+    delete userBans[uid];
+    return false;
+  }
+  return true;
+}
+
+function banTimeLeft(uid) {
+  if (!userBans[uid]) return 0;
+  return Math.ceil((userBans[uid] - Date.now()) / (60 * 1000)); // minutes left
+}
+
+function checkAndUpdateUsage(uid) {
+  const now = Date.now();
+
+  // Check ban
+  if (isUserBanned(uid)) {
+    return { banned: true, banLeft: banTimeLeft(uid) };
+  }
+
+  // Check usage
+  if (!userUsage[uid]) {
+    userUsage[uid] = { count: 1, lastReset: now };
+    return { banned: false, allowed: true, count: 1 };
+  }
+
+  // Reset usage after 24 hours
+  if (now - userUsage[uid].lastReset > RESET_DURATION) {
+    userUsage[uid] = { count: 1, lastReset: now };
+    return { banned: false, allowed: true, count: 1 };
+  }
+
+  // If user already hit max usage, ban them
+  if (userUsage[uid].count >= MAX_USAGE) {
+    userBans[uid] = now + BAN_DURATION;
+    return { banned: true, banLeft: BAN_DURATION / (60 * 1000) };
+  }
+
+  userUsage[uid].count++;
+  return { banned: false, allowed: true, count: userUsage[uid].count };
+}
+
+function usageMessage(uid, count) {
+  // White circle at 1, chart emoji after
+  const emoji = count === 1 ? '⚪️' : '📈';
+  // Average score percentage (count * 10)%
+  return `${emoji} 𝗔𝘃𝗲𝗿𝗮𝗴𝗲 ${convertToBold(uid)}: ${count * 10}%\n` +
+         `📊 Usage: ${count}/${USAGE_LIMIT}\n` +
+         `🕒 Current Time (PH): ${getPHTime()}\n\n` +
+         `POWERED BY MESSANDRA AI`;
 }
 
 async function sendTemp(api, threadID, message) {
@@ -59,66 +108,94 @@ module.exports.config = {
   version: '1.2.1',
   hasPermission: 0,
   usePrefix: false,
-  aliases: ['messandra', 'lorex'],
+  aliases: ['messandra', 'lorex', 'reset', 'bannedlist', 'recover', 'recoverall', 'feedback'],
   description: "An AI command powered by GPT-5 + Gemini Vision",
-  usages: "ai [prompt]",
+  usages: "ai [prompt] | reset | bannedlist | recover <UID> | recoverall | feedback <message>",
   credits: 'LorexAi',
   cooldowns: 0
 };
 
-module.exports.run = async function({ api, event, args, permission }) {
-  const input = args.join(' ');
+module.exports.run = async function({ api, event, args }) {
+  const input = args.join(' ').trim();
   const uid = event.senderID;
   const threadID = event.threadID;
   const messageID = event.messageID;
-  const userName = event.senderName || "User";
+  const cmd = event.commandName?.toLowerCase();
 
-  // === Usage limit logic for Role 0 users ===
-  if (permission === 0) {
-    const now = Date.now();
-    if (!userUsage[uid]) {
-      userUsage[uid] = { count: 1, lastReset: now };
-    } else {
-      const timeSinceReset = now - userUsage[uid].lastReset;
-      if (timeSinceReset > RESET_TIME_MS) {
-        userUsage[uid].count = 1;
-        userUsage[uid].lastReset = now;
-      } else {
-        if (userUsage[uid].count >= USAGE_LIMIT) {
-          const remaining = Math.ceil((RESET_TIME_MS - timeSinceReset) / (60 * 1000));
-          return api.sendMessage(`⚠️ You’ve reached your limit (${USAGE_LIMIT}/${USAGE_LIMIT}).\n⏳ Try again in ${remaining} minute(s).`, threadID, messageID);
-        }
-        userUsage[uid].count += 1;
-      }
+  // --- FEEDBACK command ---
+  if (cmd === 'feedback') {
+    if (!input) {
+      return api.sendMessage("❌ Please provide a feedback message.\n\nExample: messandra feedback The bot is awesome!", threadID, messageID);
+    }
+    const userName = event.senderName || `User ${uid}`;
+    const forwardMsg = `📩 Feedback/Report from: ${userName} (UID: ${uid})\n\n${input}`;
+    try {
+      await api.sendMessage(forwardMsg, ADMIN_UID);
+      return api.sendMessage("✅ Thank you! Your feedback has been sent to the admin.", threadID, messageID);
+    } catch (err) {
+      console.error(err);
+      return api.sendMessage("❌ Failed to send feedback. Please try again later.", threadID, messageID);
     }
   }
 
-  // === Update score stats ===
-  if (!userStats[uid]) {
-    userStats[uid] = { totalPoints: 1, uses: 1 };
-  } else {
-    userStats[uid].totalPoints += 1;
-    userStats[uid].uses += 1;
+  // Admin-only commands:
+  if (['reset', 'bannedlist', 'recover', 'recoverall'].includes(cmd) && uid !== ADMIN_UID) {
+    return api.sendMessage("❌ You are not authorized to use this command.", threadID, messageID);
   }
 
-  // === Create time box ===
-  const timePH = getPHTime();
-  const timeBox = `🕒 𝗧𝗶𝗺𝗲 (𝗣𝗛): 𝗖𝘂𝗿𝗿𝗲𝗻𝘁 𝘁𝗶𝗺𝗲 𝗶𝘀 𝗻𝗼𝘄 𝗮𝘁 𝗵𝗲𝗿𝗲:  ${timePH}`;
-
-  // === Usage info box ===
-  let usageInfo = '';
-  if (permission === 0 && userUsage[uid]) {
-    usageInfo = `📊 𝗨𝘀𝗮𝗴𝗲: ${userUsage[uid].count}/${USAGE_LIMIT}`;
+  if (cmd === 'reset' && uid === ADMIN_UID) {
+    delete userUsage[uid];
+    delete userBans[uid];
+    return api.sendMessage("✅ Your usage and ban have been reset.", threadID, messageID);
   }
 
-  // === Average score bar + percentage ===
-  const stats = userStats[uid];
-  const percentage = ((stats.totalPoints / stats.uses) * 100).toFixed(0);
-  const bar = generateScoreBar(percentage);
-  const averageLine = `📈 𝗔𝘃𝗲𝗿𝗮𝗴𝗲 𝗳𝗼𝗿 ${userName}: ${bar} ${percentage}%`;
+  if (cmd === 'bannedlist' && uid === ADMIN_UID) {
+    const bannedUsers = Object.entries(userBans);
+    if (!bannedUsers.length) return api.sendMessage("ℹ️ No users currently banned.", threadID, messageID);
+    let msg = "🚫 Banned Users:\n";
+    const now = Date.now();
+    bannedUsers.forEach(([buid, banExpires], i) => {
+      const timeLeft = banExpires - now;
+      msg += `${i + 1}. UID: ${buid} — Expires in: ${formatTime(timeLeft > 0 ? timeLeft : 0)}\n`;
+    });
+    return api.sendMessage(msg.trim(), threadID, messageID);
+  }
 
-  // === Footer ===
-  const poweredBy = "⚡ POWERED BY MESSANDRA AI";
+  if (cmd === 'recover' && uid === ADMIN_UID) {
+    if (!args[0]) return api.sendMessage("❌ Please provide a UID to recover.", threadID, messageID);
+    const targetUID = args[0];
+    let didRecover = false;
+    if (userUsage[targetUID]) {
+      delete userUsage[targetUID];
+      didRecover = true;
+    }
+    if (userBans[targetUID]) {
+      delete userBans[targetUID];
+      didRecover = true;
+    }
+    if (didRecover) return api.sendMessage(`✅ Usage and ban reset for user ID ${targetUID}.`, threadID, messageID);
+    else return api.sendMessage(`ℹ️ No usage or ban record found for user ID ${targetUID}.`, threadID, messageID);
+  }
+
+  if (cmd === 'recoverall' && uid === ADMIN_UID) {
+    Object.keys(userUsage).forEach(k => delete userUsage[k]);
+    Object.keys(userBans).forEach(k => delete userBans[k]);
+    return api.sendMessage("✅ All users usage and bans have been reset.", threadID, messageID);
+  }
+
+  // --- USAGE AND BAN CHECK ---
+  const usageStatus = checkAndUpdateUsage(uid);
+
+  if (usageStatus.banned) {
+    return api.sendMessage(`⛔️ You are banned due to excessive usage.\n⏳ Wait ${usageStatus.banLeft} minute(s).`, threadID, messageID);
+  }
+
+  if (!usageStatus.allowed) {
+    return api.sendMessage(`⚠️ Usage limit reached (${USAGE_LIMIT}/${USAGE_LIMIT}). Try again in 24 hours.`, threadID, messageID);
+  }
+
+  // Show usage summary before processing input
+  await api.sendMessage(usageMessage(uid, usageStatus.count), threadID);
 
   // === IMAGE HANDLING (Gemini Vision) ===
   const isPhotoReply = event.type === "message_reply"
@@ -134,19 +211,12 @@ module.exports.run = async function({ api, event, args, permission }) {
 
     try {
       const { data } = await axios.get('https://arychauhann.onrender.com/api/gemini-proxy', {
-        params: {
-          prompt: input,
-          imgUrl: photoUrl
-        }
+        params: { prompt: input, imgUrl: photoUrl }
       });
 
       if (data?.result) {
         const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
-        return api.editMessage(
-          `${opener}\n\n${data.result}\n\n${timeBox}\n${usageInfo}\n${averageLine}\n\n${poweredBy}`,
-          tempMsg.messageID,
-          threadID
-        );
+        return api.editMessage(`${opener}\n\n${data.result}`, tempMsg.messageID, threadID);
       }
 
       return api.editMessage("⚠️ Unexpected response from Gemini Vision API.", tempMsg.messageID, threadID);
@@ -157,39 +227,23 @@ module.exports.run = async function({ api, event, args, permission }) {
   }
 
   // === GPT-5 TEXT MODE ===
-  if (!input) return api.sendMessage("❌ Paki‑type ang prompt mo.\n\nExample: messandra what is love?", threadID, messageID);
+  if (!input) return api.sendMessage("❌ Please provide a prompt.", threadID, messageID);
 
-  const tempMsg = await sendTemp(api, threadID, "⏳GPT-5 GENERATING....");
+  const tempMsg = await sendTemp(api, threadID, "🔎 Thinking...");
 
   try {
-    const { data } = await axios.get('https://daikyu-api.up.railway.app/api/gpt-5', {
-      params: {
-        ask: input,
-        uid: uid
-      }
+    const response = await axios.get("https://arychauhann.onrender.com/api/gpt-proxy", {
+      params: { prompt: input }
     });
 
-    if (!data?.response) {
-      return api.editMessage("❌ No response received. Try again.", tempMsg.messageID, threadID);
+    if (response.data?.result) {
+      const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
+      return api.editMessage(`${opener}\n\n${response.data.result}`, tempMsg.messageID, threadID);
     }
 
-    const formatted = data.response
-      .replace(/\*\*(.*?)\*\*/g, (_, t) => convertToBold(t))
-      .replace(/##(.*?)##/g, (_, t) => convertToBold(t))
-      .replace(/###\s*/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-
-    const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
-
-    return api.editMessage(
-      `${opener}\n\n${formatted}\n\n${timeBox}\n${usageInfo}\n${averageLine}\n\n${poweredBy}`,
-      tempMsg.messageID,
-      threadID
-    );
-
+    return api.editMessage("⚠️ Unexpected response from GPT-5 API.", tempMsg.messageID, threadID);
   } catch (err) {
     console.error(err);
-    return api.editMessage("⚠️ Something went wrong. Try again later.", tempMsg.messageID, threadID);
+    return api.editMessage("❌ Error getting response from GPT-5 API.", tempMsg.messageID, threadID);
   }
 };
