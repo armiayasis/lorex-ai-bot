@@ -17,7 +17,7 @@ const responseOpeners = [
 ];
 
 module.exports.config = {
-  name: 'llama',
+  name: 'llama6',
   version: '1.1.0',
   hasPermission: 0,
   usePrefix: false,
