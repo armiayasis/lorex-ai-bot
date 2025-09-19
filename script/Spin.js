@@ -6,7 +6,7 @@ module.exports.config = {
   description: "Spin the wheel to earn random credits!",
   hasPermission: 0,
   usages: "spin",
-  cooldowns: 60 // 60 seconds cooldown
+  cooldowns: 0 // 0 seconds cooldown
 };
 
 module.exports.run = async function({ api, event }) {
