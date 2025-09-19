@@ -11,25 +11,33 @@ module.exports.config = {
 
 module.exports.run = async function({ api, event }) {
   const { senderID, threadID } = event;
-  const userInfo = await api.getUserInfo(senderID);
-  const name = userInfo[senderID]?.name || "User";
 
-  updateUserName(senderID, name);
+  try {
+    const userInfo = await api.getUserInfo(senderID);
+    const name = userInfo[senderID]?.name || "User";
 
-  // Define the wheel values (you can modify these)
-  const rewards = [0, 10, 20, 50, 100, 150, 200, 500];
-  const reward = rewards[Math.floor(Math.random() * rewards.length)];
+    // Update username in your database
+    updateUserName(senderID, name);
 
-  // Add the reward to the user's balance
-  updateBalance(senderID, reward, name);
+    // Random reward
+    const rewards = [0, 10, 20, 50, 100, 150, 200, 500];
+    const reward = rewards[Math.floor(Math.random() * rewards.length)];
 
-  // Prepare response message
-  let message = `🎡 SPIN RESULT:\n`;
-  if (reward === 0) {
-    message += `🙁 Sayang, wala kang nakuha! Better luck next time.`;
-  } else {
-    message += `🎉 Congrats, ${name}! Nanalo ka ng ${reward} credits!`;
+    // Update user's balance
+    updateBalance(senderID, reward, name);
+
+    // Send message to user
+    let message = `🎡 SPIN RESULT:\n`;
+    if (reward === 0) {
+      message += `🙁 Sayang, wala kang nakuha! Better luck next time.`;
+    } else {
+      message += `🎉 Congrats, ${name}! Nanalo ka ng ${reward} credits!`;
+    }
+
+    return api.sendMessage(message, threadID);
+
+  } catch (error) {
+    console.error("❌ Spin command error:", error);
+    return api.sendMessage("⚠️ Nagkaroon ng error habang nag-spin. Paki-try ulit.", threadID);
   }
-
-  return api.sendMessage(message, threadID);
 };
