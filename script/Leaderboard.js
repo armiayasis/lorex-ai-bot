@@ -1,29 +1,45 @@
-const { getAllUsers } = require("../utils/economy");
+const fs = require('fs');
+const path = require('path');
+
+const userDataPath = path.join(__dirname, '..', 'userData.json');
+
+function readJson(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
 
 module.exports.config = {
-  name: "leaderboard",
-  description: "Show top users by wallet balance",
-  usages: "leaderboard",
-  cooldowns: 0
+  name: 'leaderboard',
+  version: '1.0.0',
+  hasPermission: 0,
+  usePrefix: true,
+  description: 'Show top users by balance',
+  usages: 'leaderboard',
+  cooldowns: 5
 };
 
 module.exports.run = async function({ api, event }) {
-  const { threadID } = event;
-  const users = getAllUsers();
+  const userData = readJson(userDataPath);
 
-  // Sort users by wallet balance descending
-  const sorted = Object.entries(users)
-    .sort(([, a], [, b]) => b.wallet - a.wallet)
-    .slice(0, 10); // top 10
+  // Convert userData object to array with [uid, balance]
+  const leaderboard = Object.entries(userData)
+    .map(([uid, data]) => ({ uid, balance: data.balance || 0 }))
+    .filter(user => user.balance > 0)
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 10); // Top 10
 
-  if (sorted.length === 0) {
-    return api.sendMessage("ℹ️ Walang user data pa.", threadID);
+  if (leaderboard.length === 0) {
+    return api.sendMessage('❌ No users with balance found.', event.threadID);
   }
 
-  let message = "🏆 TOP 10 Richest Users 🏆\n\n";
-  sorted.forEach(([id, user], index) => {
-    message += `${index + 1}. ${user.name || "User"} — ₱${user.wallet}\n`;
+  let message = '🏆 Top 10 Leaderboard 🏆\n\n';
+
+  leaderboard.forEach((user, index) => {
+    message += `${index + 1}. ${user.uid} - ₱${user.balance.toLocaleString()}\n`;
   });
 
-  return api.sendMessage(message, threadID);
+  return api.sendMessage(message, event.threadID);
 };
