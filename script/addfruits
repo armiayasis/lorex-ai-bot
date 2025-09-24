@@ -1,0 +1,51 @@
+const fs = require('fs');
+const path = require('path');
+const userDataPath = path.join(__dirname, '..', 'userData.json');
+
+const availableFruits = ['Cherry', 'Lemon', 'Grapes', 'Watermelon', 'Kiwi', 'Apple', 'Banana'];
+
+module.exports.config = {
+  name: 'addfruits',
+  version: '1.0.1',
+  hasPermission: 0, // now everyone can use it for themselves
+  description: 'Add fruits to your own inventory',
+  usages: 'addfruits <fruit> <quantity>',
+  cooldowns: 0
+};
+
+module.exports.run = async function ({ api, event, args }) {
+  const threadID = event.threadID;
+  const userId = event.senderID;
+
+  if (args.length < 2) {
+    return api.sendMessage('❗ Usage: addfruits <fruit> <quantity>', threadID, event.messageID);
+  }
+
+  const fruitName = args[0].charAt(0).toUpperCase() + args[0].slice(1).toLowerCase();
+  const quantity = parseInt(args[1]);
+
+  if (!availableFruits.includes(fruitName)) {
+    return api.sendMessage('❌ Hindi valid na prutas.', threadID, event.messageID);
+  }
+
+  if (isNaN(quantity) || quantity <= 0) {
+    return api.sendMessage('❌ Invalid quantity.', threadID, event.messageID);
+  }
+
+  try {
+    let data = fs.existsSync(userDataPath) ? JSON.parse(fs.readFileSync(userDataPath, 'utf8')) : {};
+    if (!data[userId]) data[userId] = { balance: 0, savings: 0, fruits: {}, balanceProtection: false };
+
+    if (!data[userId].fruits) data[userId].fruits = {};
+
+    data[userId].fruits[fruitName] = (data[userId].fruits[fruitName] || 0) + quantity;
+
+    fs.writeFileSync(userDataPath, JSON.stringify(data, null, 2));
+
+    api.sendMessage(`✅ Nadagdag ang ${quantity} ${fruitName} sa iyong inventory.`, threadID, event.messageID);
+
+  } catch (err) {
+    console.error('Error in addfruits command:', err);
+    api.sendMessage('❌ May error habang dinadagdag ang prutas.', threadID, event.messageID);
+  }
+};
