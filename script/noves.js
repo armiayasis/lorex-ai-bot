@@ -13,21 +13,24 @@ function convertToBold(text) {
   return text.split('').map(char => boldMap[char] || char).join('');
 }
 
-// === GLOBALS ===
-let userUsage = {};
+// === GLOBAL VARIABLES ===
+let userUsage = {};        // userID => usage count (max 9)
 let bannedUsers = new Set();
 
 const badWords = [
-  'bobo','gago','ulol','tanga','kantot','puke','pakyu','putangina','puta',
+  'bobo', 'tanga', 'gago', 'ulol', 'pakyu', 'puke', 'putangina', 'puta', 'kantot',
 ];
 
 const usageStats = {
-  fast: [], medium: [], slow: []
+  fast: [],
+  medium: [],
+  slow: [],
 };
 
-const UPTIME_LIMIT_MINUTES = 300;
+const UPTIME_LIMIT_MINUTES = 300; // 5 hours
 let uptimeStartedAt = Date.now();
 
+// === HELPERS ===
 function getResponseCategory(ms) {
   if (ms <= 1000) return 'fast';
   if (ms <= 3000) return 'medium';
@@ -55,18 +58,18 @@ async function sendTemp(api, threadID, message) {
 
 // === CONFIG ===
 module.exports.config = {
-  name: 'mova',
+  name: 'nova4',
   version: '2.0.0',
   hasPermission: 0,
   usePrefix: false,
-  aliases: ['nova', 'aryan'],
-  description: "Ask LLama-4 Maverick AI (w/ photo support)",
-  usages: "maverick [prompt]",
-  credits: "Aryan API + Nova-style by user",
+  aliases: ['nova', 'lore5x'],
+  description: "An AI command powered by Claude API",
+  usages: "nova [prompt]",
+  credits: 'LorexAi',
   cooldowns: 0,
 };
 
-// === RUN ===
+// === RUN FUNCTION ===
 module.exports.run = async function({ api, event, args }) {
   const uid = event.senderID;
   const threadID = event.threadID;
@@ -74,87 +77,111 @@ module.exports.run = async function({ api, event, args }) {
   const input = args.join(' ').trim();
   const command = args[0]?.toLowerCase();
 
-  // === RESET ===
+  // === HANDLE RESET COMMANDS ===
   if (command === 'reset') {
     userUsage[uid] = 0;
     bannedUsers.delete(uid);
+
     if (args[1]?.toLowerCase() === 'uptime') {
       uptimeStartedAt = Date.now();
-      return api.sendMessage("🔄 Uptime reset to 5 hours.", threadID, messageID);
+      return api.sendMessage("🔄 AI uptime has been reset to 5 hours.", threadID, messageID);
     }
-    return api.sendMessage("✅ Usage and ban reset.", threadID, messageID);
+
+    return api.sendMessage("✅ Your usage and ban status have been reset.", threadID, messageID);
   }
 
-  // === BANNED USER CHECK ===
+  // === CHECK IF USER IS BANNED ===
   if (bannedUsers.has(uid)) {
-    return api.sendMessage("⛔ You are banned.\n🔄 Use 'maverick reset' to unban.", threadID, messageID);
+    return api.sendMessage(
+      "❌ You are banned from using this command due to inappropriate language.\n🔄 Type 'nova reset' to unban.",
+      threadID,
+      messageID
+    );
   }
 
-  // === BAD WORDS FILTER ===
+  // === BAD WORD FILTER ===
   const lowerInput = input.toLowerCase();
   if (badWords.some(word => lowerInput.includes(word))) {
     bannedUsers.add(uid);
-    return api.sendMessage("🚫 Inappropriate language detected. You are now banned.\n🔄 Type 'maverick reset' to unban.", threadID, messageID);
+    return api.sendMessage(
+      "🚫 You used inappropriate language. You are now banned from using the AI.\n🔄 Type 'nova reset' to unban.",
+      threadID,
+      messageID
+    );
   }
 
-  // === UPTIME CHECK ===
+  // === CHECK UPTIME ===
   const elapsedMinutes = Math.floor((Date.now() - uptimeStartedAt) / 60000);
-  const uptimeLeft = Math.max(UPTIME_LIMIT_MINUTES - elapsedMinutes, 0);
-  if (uptimeLeft <= 0) {
-    return api.sendMessage("⚠️ Maverick AI is offline. Uptime ended.\n🔁 Type 'maverick reset uptime' to restart.", threadID, messageID);
+  const uptimeLeftMinutes = Math.max(UPTIME_LIMIT_MINUTES - elapsedMinutes, 0);
+  if (uptimeLeftMinutes <= 0) {
+    return api.sendMessage(
+      "🚫 AI is currently offline. Uptime has ended.\n🛠 Use 'nova reset uptime' to restart it.",
+      threadID,
+      messageID
+    );
   }
 
-  // === USAGE CHECK ===
+  // === CHECK USAGE LIMIT ===
   userUsage[uid] = userUsage[uid] || 0;
   if (userUsage[uid] >= 9) {
-    return api.sendMessage("⚠️ You've reached the 9/9 usage limit.\n🔁 Type 'maverick reset' to reset your usage.", threadID, messageID);
+    return api.sendMessage(
+      "⚠️ You've reached the 9/9 usage limit.\n🔄 Type 'nova reset' to reset your usage.",
+      threadID,
+      messageID
+    );
   }
 
   if (!input) {
-    return api.sendMessage("❓ Please provide a prompt.", threadID, messageID);
+    return api.sendMessage("❓ Please enter a prompt to ask the AI.", threadID, messageID);
   }
 
-  // === PHOTO REPLY SUPPORT ===
-  const isPhotoReply = event.type === "message_reply" &&
-    event.messageReply?.attachments?.[0]?.type === "photo";
-  const imageUrl = isPhotoReply ? event.messageReply.attachments[0].url : "";
-
-  const tempMsg = await sendTemp(api, threadID, "🧠 Thinking with Maverick...");
+  const tempMsg = await sendTemp(api, threadID, "🔍 Processing...");
 
   try {
-    const start = Date.now();
+    const startTime = Date.now();
 
-    const res = await axios.get("https://arychauhann.onrender.com/api/llama-4-maverick-17b-128e-instruct", {
-      params: {
-        uid: uid,
-        prompt: input,
-        url: imageUrl
-      }
+    // Call the Claude AI API
+    const response = await axios.get('https://daikyu-api.up.railway.app/api/claude-ai', {
+      params: { prompt: input, uid }
     });
 
-    const end = Date.now();
-    const elapsed = end - start;
+    const endTime = Date.now();
+    const elapsed = endTime - startTime;
     const category = getResponseCategory(elapsed);
-    usageStats[category].push({ user: uid, ms: elapsed });
+    const kmNumber = usageStats[category].length + 1;
+    usageStats[category].push({ user: uid, ms: elapsed, km: kmNumber });
 
     userUsage[uid] += 1;
 
+    const timeNow = getCurrentTime();
+    const uptimeLeft = getUptimeLeft();
+
+    // Dashboard stats
+    const fastCount = usageStats.fast.length;
+    const mediumCount = usageStats.medium.length;
+    const slowCount = usageStats.slow.length;
+
+    const dashboard =
+      `📊 ${convertToBold("FAST")}: ${fastCount} km\n` +
+      `⚖️ ${convertToBold("MEDIUM")}: ${mediumCount} km\n` +
+      `🐢 ${convertToBold("SLOW")}: ${slowCount} km\n` +
+      `⏱️ ${convertToBold("Uptime Left")}: ${uptimeLeft}`;
+
     const reply =
-      `🤖 ${convertToBold("Maverick 17B AI")} Response\n` +
+      `✨ ${convertToBold("Super Nova")} AI Response ✨\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📌 ${convertToBold("Prompt")}: ${input}\n` +
-      `📨 ${convertToBold("Reply")}:\n${res.data.reply || "⚠️ No reply"}\n` +
+      `📨 ${convertToBold("Reply")}:\n${response.data.reply || response.data.answer || "No response."}\n` +
       `━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🧑 User: ${uid}\n` +
-      `📊 Usage: ${userUsage[uid]}/9\n` +
-      `⏱️ Uptime Left: ${getUptimeLeft()}\n` +
-      `⚡ Speed: ${elapsed}ms (${category})\n` +
-      `🕒 Time: ${getCurrentTime()}\n` +
-      `🛠 Operator: ${res.data.operator || "Manuelson Yasis"}`;
+      `🕒 ${convertToBold("Time")}: ${timeNow}\n` +
+      `🔋 ${convertToBold("Powered by Claude AI")}\n` +
+      `📊 ${convertToBold("Usage")}: ${userUsage[uid]}/9\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      dashboard;
 
     return api.sendMessage(reply, threadID, messageID);
-  } catch (err) {
-    console.error("Maverick Error:", err);
-    return api.sendMessage("❌ Error occurred while calling Maverick API.", threadID, messageID);
+  } catch (error) {
+    console.error(error);
+    return api.sendMessage("❌ An error occurred while processing your request.", threadID, messageID);
   }
 };
