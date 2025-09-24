@@ -58,7 +58,7 @@ async function sendTemp(api, threadID, message) {
 
 // === CONFIG ===
 module.exports.config = {
-  name: 'nova',
+  name: 'nova9',
   version: '2.0.0',
   hasPermission: 0,
   usePrefix: false,
@@ -134,7 +134,7 @@ module.exports.run = async function({ api, event, args }) {
   }
 
   if (!input) {
-    return api.sendMessage("❓ Please enter a prompt to ask the AI.", threadID, messageID);
+    return api.sendMessage("❓ Please enter a prompt to ask the Nova AI.", threadID, messageID);
   }
 
   const tempMsg = await sendTemp(api, threadID, "🔍 Processing...");
