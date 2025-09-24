@@ -150,7 +150,7 @@ module.exports.run = async function({ api, event, args }) {
       `⏱️ Uptime Left: ${getUptimeLeft()}\n` +
       `⚡ Speed: ${elapsed}ms (${category})\n` +
       `🕒 Time: ${getCurrentTime()}\n` +
-      `🛠 Operator: ${res.data.operator || "Aryan"}`;
+      `🛠 Operator: ${res.data.operator || "Manuelson Yasis"}`;
 
     return api.sendMessage(reply, threadID, messageID);
   } catch (err) {
