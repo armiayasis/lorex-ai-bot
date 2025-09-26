@@ -88,7 +88,7 @@ function addLog(type, logObj) {
 
 // === MODULE CONFIG ===
 module.exports.config = {
-  name: 'nova41',
+  name: 'nova',
   version: '2.0.1',
   hasPermission: 0,
   usePrefix: true,
