@@ -3,7 +3,7 @@ const fs = require("fs-extra");
 const path = require("path");
 
 module.exports.config = {
-  name: "llama",
+  name: "lllama",
   version: "4.0.0",
   hasPermission: 0,
   usePrefix: true,
@@ -143,11 +143,11 @@ module.exports.run = async function ({ api, event, args }) {
 
   // === ❓ Unknown subcommand
   return api.sendMessage(
-    `🧠 LLaMA AI Toolkit Help:\n\n` +
-    `📌 llama generate <text> - chat with LLaMA\n` +
-    `🎨 llama edit (reply) - Ghibli-style art\n` +
-    `🖼️ llama poli <prompt> - AI art from prompt\n` +
-    `🧼 llama remini (reply) - enhance image\n`,
+    `🧠 LLlaMA AI Toolkit Help:\n\n` +
+    `📌 lllama generate <text> - chat with LLaMA\n` +
+    `🎨 lllama edit (reply) - Ghibli-style art\n` +
+    `🖼️ lllama poli <prompt> - AI art from prompt\n` +
+    `🧼 lllama remini (reply) - enhance image\n`,
     threadID,
     messageID
   );
