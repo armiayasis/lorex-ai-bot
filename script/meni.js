@@ -3,7 +3,7 @@ const axios = require('axios');
 module.exports.config = {
   name: 'help',
   version: '6.8',
-  role: 2,
+  role: 0,
   hasPrefix: true,
   aliases: ['command', 'commands', 'cmds'],
   description: "Beginner's guide and command reference",
@@ -54,7 +54,7 @@ module.exports.run = async function ({ api, event, enableCommands, args, Utils, 
       }
       helpMessage += `\n━━━━━━━━━━━━━━━━━━━━\n`;
       helpMessage += `Total commands: ${totalCommands}\n`;
-      helpMessage += `━━━━━━━━━━ 𝗠𝗘𝗦𝗦𝗔𝗡𝗗𝗥𝗔 𝗚𝗣𝗧-4 ━━━━━━━━━\n`;
+      helpMessage += `━━━━━━━━━━ LLAMA ASSISTANT━━━━━━━━━\n`;
 
       return api.sendMessage(helpMessage, event.threadID, event.messageID);
 
