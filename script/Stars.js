@@ -3,29 +3,60 @@ module.exports.config = {
   version: '2.0.0',
   hasPermission: 0,
   usePrefix: true,
-  aliases: ['rate', 'star', 'report', 'bug', 'feedback'],
-  description: "Mag-rate, magbigay feedback, mag-report ng bugs/issues, tingnan stats at users, at manage ratings",
+  aliases: ['rate', 'star', 'post', 'react', 'comment', 'dashboard', 'claim', 'stats', 'users', 'logs', 'admin_dashboard'],
+  description: "Rating, posts, react, comment, dashboard, admin panel",
   usages: [
-    "ratingstar <1-5> [feedback] - Mag-rate at magbigay feedback",
-    "ratingstar stats - Tingnan ang summary ng ratings",
-    "ratingstar rules - Basahin ang rules, privacy, terms, at instructions",
-    "ratingstar users - (Admin) Tingnan ang listahan ng mga nag-rate",
-    "ratingstar report <feedback text> - Mag-send ng feedback report sa admin",
-    "ratingstar bug <bug description> - Mag-report ng bug sa admin",
-    "ratingstar logs - (Admin) Tingnan ang logs ng actions"
+    "ratingstar <1-5> - Mag-rate (feedback command removed)",
+    "ratingstar stats - Tingnan summary ng ratings",
+    "ratingstar rules - Basahin rules, privacy, terms",
+    "ratingstar users - (Admin) Listahan ng mga users",
+    "ratingstar post <content> - Mag-post ng content",
+    "ratingstar feed - Tingnan lahat ng mga post",
+    "ratingstar react <post_id> <emoji> - Mag-react sa post",
+    "ratingstar comment <post_id> <comment> - Mag-comment sa post",
+    "ratingstar dashboard - Tingnan sariling points at posts stats",
+    "ratingstar claim - Claim your free daily points",
+    "ratingstar admin_dashboard - (Admin) Tingnan lahat ng user stats"
   ].join('\n'),
-  cooldowns: 5,
-  credits: 'ChatGPT + YourName',
+  cooldowns: 0,
+  credits: 'ChatGPT + You',
 };
 
-// In-memory data stores (ideally use DB or file persistence)
-const ratingsData = {};
-const logs = [];
-const admins = ['1234567890']; // Palitan ng actual admin IDs
+const admins = ['100051724779220']; // Admin ID
 
+// Data stores (replace with DB in production)
+const ratingsData = {}; // { userId: {ratings: [], totalQuestions: 0} }
+const logs = []; // {timestamp, type, userId, content}
+const posts = []; // {postId, userId, content, timestamp, reactions: {emoji: [userId]}, comments: [{userId, comment, timestamp}]}
+const userPoints = {}; // userId => points
+const dailyClaimed = {}; // userId => date string yyyy-mm-dd
+
+// Helpers
 function addLog(type, userId, content) {
-  const timestamp = new Date().toISOString();
-  logs.push({ timestamp, type, userId, content });
+  logs.push({ timestamp: new Date().toISOString(), type, userId, content });
+}
+function getUserPoints(userId) {
+  if (!userPoints[userId]) userPoints[userId] = 0;
+  return userPoints[userId];
+}
+function addUserPoints(userId, pts) {
+  if (!userPoints[userId]) userPoints[userId] = 0;
+  userPoints[userId] += pts;
+}
+
+// Notify top user if points > 34.23 (called after points update)
+async function notifyTopUser(api) {
+  let topUser = null;
+  let maxPoints = 0;
+  for (const [userId, pts] of Object.entries(userPoints)) {
+    if (pts > maxPoints) {
+      maxPoints = pts;
+      topUser = userId;
+    }
+  }
+  if (topUser && maxPoints > 34.23) {
+    await api.sendMessage(`🔥 Top User Alert! User ${topUser} has the highest points: ${maxPoints.toFixed(2)}!`, topUser);
+  }
 }
 
 module.exports.run = async function({ api, event, args }) {
@@ -34,57 +65,58 @@ module.exports.run = async function({ api, event, args }) {
   const senderID = event.senderID;
 
   if (!args[0]) {
-    const helpMsg = 
-      `📌 **Paano gamitin ang Llama Assistant Rating:**\n\n` +
-      `⭐ \`ratingstar <1-5> [feedback]\` — Magbigay ng rating at optional feedback\n` +
-      `📊 \`ratingstar stats\` — Tingnan ang kabuuang rating at top users\n` +
-      `📜 \`ratingstar rules\` — Basahin ang Rules, Privacy, Terms, at Instructions\n` +
-      (admins.includes(senderID) ? `👥 \`ratingstar users\` — Tingnan ang listahan ng mga nag-rate\n` : '') +
-      `🛠️ \`ratingstar report <feedback>\` — Magpadala ng feedback report sa admin\n` +
-      `🐞 \`ratingstar bug <description>\` — Mag-report ng bug sa admin\n` +
-      (admins.includes(senderID) ? `📋 \`ratingstar logs\` — Tingnan ang logs ng mga aksyon\n` : '') +
-      `\n🚀 Mag-type ng \`llamaa <iyong mensahe>\` para makipag-chat sa Llama Assistant!`;
+    let helpMsg =
+      `📌 Paano gamitin ang Llama Assistant Rating:\n\n` +
+      `⭐ ratingstar <1-5> - Magbigay rating\n` +
+      `📊 ratingstar stats - Tingnan summary ng ratings\n` +
+      `📜 ratingstar rules - Basahin rules, privacy, terms\n` +
+      (admins.includes(senderID) ? `👥 ratingstar users - Tingnan listahan ng users\n` : '') +
+      `📝 ratingstar post <content> - Mag-post ng content\n` +
+      `📢 ratingstar feed - Tingnan lahat ng mga post\n` +
+      `❤️ ratingstar react <post_id> <emoji> - Mag-react sa post\n` +
+      `💬 ratingstar comment <post_id> <comment> - Mag-comment sa post\n` +
+      `📈 ratingstar dashboard - Tingnan sariling points at posts stats\n` +
+      `🎁 ratingstar claim - Claim your free daily points\n` +
+      (admins.includes(senderID) ? `📋 ratingstar logs - Tingnan logs\n` : '') +
+      (admins.includes(senderID) ? `📊 ratingstar admin_dashboard - Tingnan admin dashboard\n` : '');
 
     return api.sendMessage(helpMsg, threadID, messageID);
   }
 
   const cmd = args[0].toLowerCase();
 
+  // RULES
   if (cmd === 'rules') {
-    const rulesText = 
-      `📜 **LLAMA ASSISTANT RULES & POLICIES** 📜\n\n` +
-      `🔹 **Mga Alituntunin:**\n` +
-      `• Gamitin ang assistant nang responsable at may respeto sa kapwa.\n` +
-      `• Iwasan ang hindi angkop na salita o mensahe.\n` +
-      `• Ang assistant ay gabay lamang, hindi kapalit ng propesyonal na payo.\n\n` +
-
-      `🔒 **Privacy Policy:**\n` +
-      `• Ligtas ang iyong impormasyon at hindi ibinabahagi sa iba.\n` +
-      `• Iwasan ang pagbibigay ng sensitibong data sa chat.\n\n` +
-
-      `📃 **Terms of Service:**\n` +
-      `• Ginagamit mo ang assistant sa sariling responsibilidad.\n` +
-      `• Hindi kami mananagot sa anumang pinsala o problema.\n` +
+    const rulesText =
+      `📜 LLAMA ASSISTANT RULES & POLICIES\n\n` +
+      `🔹 Mga Alituntunin:\n` +
+      `• Gamitin nang responsable at may respeto.\n` +
+      `• Iwasan ang hindi angkop na salita.\n` +
+      `• Assistant ay gabay lamang, hindi kapalit ng propesyonal na payo.\n\n` +
+      `🔒 Privacy Policy:\n` +
+      `• Ligtas ang info, hindi ibinabahagi.\n` +
+      `• Iwasan ang sensitibong data.\n\n` +
+      `📃 Terms of Service:\n` +
+      `• Ginagamit mo sa sariling responsibilidad.\n` +
+      `• Hindi kami mananagot sa anumang pinsala.\n` +
       `• Maaring baguhin ang serbisyo anumang oras.\n\n` +
-
-      `🚀 **Paano Gamitin ang Llama Express:**\n` +
-      `• I-type ang \`llamaa <iyong mensahe>\` para magtanong o makipag-chat.\n` +
-      `• Siguraduhing malinaw ang tanong para sa pinakamahusay na sagot.\n` +
-      `• Mag-rate gamit ang \`ratingstar <1-5>\` para makatulong sa pagpapabuti.\n\n` +
-
-      `✨ Salamat sa paggamit ng Llama Assistant! 🦙💬`;
+      `🚀 Paano Gamitin:\n` +
+      `• llamaa <iyong mensahe> para magtanong.\n` +
+      `• Mag-rate gamit ratingstar <1-5> para makatulong.\n\n` +
+      `✨ Salamat sa paggamit ng Llama Assistant! 🦙`;
 
     addLog('rules_view', senderID, 'Nag-view ng rules');
     return api.sendMessage(rulesText, threadID, messageID);
   }
 
+  // STATS
   if (cmd === 'stats') {
     const allRatings = [];
     for (const userId in ratingsData) {
       allRatings.push(...ratingsData[userId].ratings);
     }
     if (allRatings.length === 0) {
-      return api.sendMessage("⚠️ **Wala pang ratings na naibigay. Maging una sa pag-rate!**", threadID, messageID);
+      return api.sendMessage("⚠️ Wala pang ratings na naibigay.", threadID, messageID);
     }
 
     const totalRatings = allRatings.length;
@@ -102,20 +134,21 @@ module.exports.run = async function({ api, event, args }) {
       topUsersText = "Walang datos ng mga user na nagtatanong pa.";
     } else {
       topUsersText = sortedUsers
-        .map(([userId, data], idx) => `➤ #${idx + 1} User ID: **${userId}** — *${data.totalQuestions} tanong*`)
+        .map(([userId, data], idx) => `➤ #${idx + 1} User ID: ${userId} — ${data.totalQuestions} tanong`)
         .join('\n');
     }
 
-    const reply = 
-      `🌟📊 **Llama Assistant Rating Summary** 📊🌟\n\n` +
-      `• **Average Rating:** ${stars} (${avg}/5)\n` +
-      `• **Total Ratings:** ${totalRatings}\n\n` +
-      `👥 **Top 3 Users na Pinaka-Madalas Magtanong:**\n${topUsersText}`;
+    const reply =
+      `🌟 Llama Assistant Rating Summary 🌟\n\n` +
+      `• Average Rating: ${stars} (${avg}/5)\n` +
+      `• Total Ratings: ${totalRatings}\n\n` +
+      `👥 Top 3 Users na Pinaka-Madalas Magtanong:\n${topUsersText}`;
 
     addLog('stats_view', senderID, 'Nag-view ng stats');
     return api.sendMessage(reply, threadID, messageID);
   }
 
+  // USERS - ADMIN ONLY
   if (cmd === 'users') {
     if (!admins.includes(senderID)) {
       return api.sendMessage("❌ Hindi ka authorized para gamitin ito.", threadID, messageID);
@@ -125,29 +158,21 @@ module.exports.run = async function({ api, event, args }) {
       return api.sendMessage("⚠️ Wala pang user ratings na naitala.", threadID, messageID);
     }
 
-    let userList = '👥 **Listahan ng mga Nag-rate:**\n\n';
+    let userList = '👥 Listahan ng mga Nag-rate:\n\n';
 
     for (const [userId, data] of Object.entries(ratingsData)) {
-      const avgRating = (data.ratings.reduce((a,b) => a+b, 0) / data.ratings.length).toFixed(2);
-      userList += `• User ID: **${userId}**\n` +
-                  `  - Average Rating: ${avgRating}/5\n` +
-                  `  - Total Ratings: ${data.ratings.length}\n` +
-                  `  - Tanong: ${data.totalQuestions}\n` +
-                  `  - Feedback:\n`;
-      if (data.feedbacks.length === 0) {
-        userList += `    • Walang feedback\n\n`;
-      } else {
-        data.feedbacks.forEach((fb, i) => {
-          userList += `    ${i+1}. "${fb}"\n`;
-        });
-        userList += '\n';
-      }
+      const avgRating = (data.ratings.reduce((a, b) => a + b, 0) / data.ratings.length).toFixed(2);
+      userList += `• User ID: ${userId}\n` +
+        `  - Average Rating: ${avgRating}/5\n` +
+        `  - Total Ratings: ${data.ratings.length}\n` +
+        `  - Tanong: ${data.totalQuestions}\n\n`;
     }
 
     addLog('users_view', senderID, 'Nag-view ng users list');
     return api.sendMessage(userList, threadID, messageID);
   }
 
+  // LOGS - ADMIN ONLY
   if (cmd === 'logs') {
     if (!admins.includes(senderID)) {
       return api.sendMessage("❌ Hindi ka authorized para gamitin ito.", threadID, messageID);
@@ -157,87 +182,177 @@ module.exports.run = async function({ api, event, args }) {
       return api.sendMessage("⚠️ Wala pang logs na naitala.", threadID, messageID);
     }
 
-    // Limit logs to last 20 for brevity
     const lastLogs = logs.slice(-20).map(log => {
       return `[${log.timestamp}] (${log.type}) User: ${log.userId} — ${log.content}`;
     }).join('\n');
 
-    return api.sendMessage(`📋 **Huling 20 Logs ng System:**\n\n${lastLogs}`, threadID, messageID);
+    return api.sendMessage(`📋 Huling 20 Logs ng System:\n\n${lastLogs}`, threadID, messageID);
   }
 
-  // Handle report and bug commands (feedback to admin)
-  if (cmd === 'report' || cmd === 'feedback') {
-    const reportText = args.slice(1).join(' ').trim();
-    if (!reportText) {
-      return api.sendMessage("❌ Paki-sulat ang feedback o report text.", threadID, messageID);
+  // ADMIN DASHBOARD
+  if (cmd === 'admin_dashboard') {
+    if (!admins.includes(senderID)) {
+      return api.sendMessage("❌ Hindi ka authorized para gamitin ito.", threadID, messageID);
+    }
+    let text = `📊 Admin Dashboard - Lahat ng User Stats\n\n`;
+    for (const [userId, data] of Object.entries(ratingsData)) {
+      const avgRating = (data.ratings.reduce((a,b)=>a+b,0)/data.ratings.length).toFixed(2);
+      const points = getUserPoints(userId);
+      const totalPosts = posts.filter(p => p.userId === userId).length;
+      text += `User ID: ${userId}\n` +
+        ` - Avg Rating: ${avgRating}\n` +
+        ` - Total Ratings: ${data.ratings.length}\n` +
+        ` - Total Questions: ${data.totalQuestions}\n` +
+        ` - Points: ${points}\n` +
+        ` - Total Posts: ${totalPosts}\n\n`;
+    }
+    return api.sendMessage(text, threadID, messageID);
+  }
+
+  // POST content
+  if (cmd === 'post') {
+    const content = args.slice(1).join(' ').trim();
+    if (!content) return api.sendMessage("❌ Paki-sulat ang content na ipo-post.", threadID, messageID);
+
+    const postId = posts.length + 1;
+    posts.push({
+      postId,
+      userId: senderID,
+      content,
+      timestamp: new Date().toISOString(),
+      reactions: {},
+      comments: []
+    });
+
+    addLog('post_created', senderID, content);
+    addUserPoints(senderID, 2); // Reward points for posting
+    await notifyTopUser(api);
+
+    return api.sendMessage(`✅ Na-post mo ang content mo (ID: ${postId}). Nakakuha ka ng 2 points!`, threadID, messageID);
+  }
+
+  // FEED all posts
+  if (cmd === 'feed') {
+    if (posts.length === 0) return api.sendMessage("Walang posts sa feed.", threadID, messageID);
+
+    let feedText = '📢 Posts Feed:\n\n';
+    posts.slice(-10).reverse().forEach(post => {
+      const reactionSummary = Object.entries(post.reactions).map(([emoji, users]) => `${emoji}(${users.length})`).join(' ') || 'Walang reactions';
+      const commentCount = post.comments.length;
+      feedText += `ID:${post.postId} | User:${post.userId}\n` +
+        `Content: ${post.content}\n` +
+        `Reactions: ${reactionSummary}\n` +
+        `Comments: ${commentCount}\n\n`;
+    });
+
+    return api.sendMessage(feedText, threadID, messageID);
+  }
+
+  // REACT to a post
+  if (cmd === 'react') {
+    const postId = parseInt(args[1]);
+    const emoji = args[2];
+    if (!postId || !emoji) return api.sendMessage("❌ Tama ang format: ratingstar react <post_id> <emoji>", threadID, messageID);
+
+    const post = posts.find(p => p.postId === postId);
+    if (!post) return api.sendMessage("❌ Hindi nakita ang post na ito.", threadID, messageID);
+
+    if (!post.reactions[emoji]) post.reactions[emoji] = [];
+    if (post.reactions[emoji].includes(senderID)) {
+      return api.sendMessage("⚠️ Na-react mo na ang post na ito gamit ang emoji na ito.", threadID, messageID);
+    }
+    post.reactions[emoji].push(senderID);
+
+    addLog('react', senderID, `Post ID ${postId} reacted with ${emoji}`);
+    addUserPoints(senderID, 0.5); // Points for reacting
+    await notifyTopUser(api);
+
+    return api.sendMessage(`✅ Na-react mo ang post (ID: ${postId}) gamit ang ${emoji}! Nakakuha ka ng 0.5 points.`, threadID, messageID);
+  }
+
+  // COMMENT on a post
+  if (cmd === 'comment') {
+    const postId = parseInt(args[1]);
+    const commentText = args.slice(2).join(' ').trim();
+
+    if (!postId || !commentText) {
+      return api.sendMessage("❌ Tama ang format: ratingstar comment <post_id> <comment>", threadID, messageID);
     }
 
-    addLog('feedback_report', senderID, reportText);
+    const post = posts.find(p => p.postId === postId);
+    if (!post) return api.sendMessage("❌ Hindi nakita ang post na ito.", threadID, messageID);
 
-    // Send report to all admins
-    const adminPromises = admins.map(adminID => 
-      api.sendMessage(
-        `📢 **Feedback Report mula sa User ${senderID}**:\n\n"${reportText}"`,
-        adminID
-      )
-    );
+    post.comments.push({
+      userId: senderID,
+      comment: commentText,
+      timestamp: new Date().toISOString()
+    });
 
-    await Promise.all(adminPromises);
+    addLog('comment', senderID, `Post ID ${postId} commented: ${commentText}`);
+    addUserPoints(senderID, 1); // Points for commenting
+    await notifyTopUser(api);
 
-    return api.sendMessage("✅ Naipadala ang iyong feedback report sa admin. Salamat!", threadID, messageID);
+    return api.sendMessage(`✅ Nakapag-comment ka sa post (ID: ${postId}). Nakakuha ka ng 1 point!`, threadID, messageID);
   }
 
-  if (cmd === 'bug') {
-    const bugText = args.slice(1).join(' ').trim();
-    if (!bugText) {
-      return api.sendMessage("❌ Paki-sulat ang description ng bug.", threadID, messageID);
+  // DASHBOARD - user stats
+  if (cmd === 'dashboard') {
+    const userData = ratingsData[senderID] || { ratings: [], totalQuestions: 0 };
+    const points = getUserPoints(senderID);
+    const userPosts = posts.filter(p => p.userId === senderID);
+
+    let avgRating = "Wala pang rating";
+    if (userData.ratings.length > 0) {
+      avgRating = (userData.ratings.reduce((a, b) => a + b, 0) / userData.ratings.length).toFixed(2);
     }
 
-    addLog('bug_report', senderID, bugText);
+    const dashboardText =
+      `📈 Dashboard ng User\n\n` +
+      `• Average Rating: ${avgRating}\n` +
+      `• Total Ratings Given: ${userData.ratings.length}\n` +
+      `• Total Questions Asked: ${userData.totalQuestions}\n` +
+      `• Total Points: ${points}\n` +
+      `• Total Posts: ${userPosts.length}`;
 
-    // Send bug report to all admins
-    const adminPromises = admins.map(adminID => 
-      api.sendMessage(
-        `🐞 **Bug Report mula sa User ${senderID}**:\n\n"${bugText}"`,
-        adminID
-      )
-    );
-
-    await Promise.all(adminPromises);
-
-    return api.sendMessage("✅ Naipadala ang iyong bug report sa admin. Salamat!", threadID, messageID);
+    return api.sendMessage(dashboardText, threadID, messageID);
   }
 
-  // Otherwise, process rating + optional feedback
-  const rating = parseInt(cmd, 10);
-  if (isNaN(rating) || rating < 1 || rating > 5) {
-    return api.sendMessage("❌ **Invalid rating.** Pumili ng numero mula 1 hanggang 5 lamang.", threadID, messageID);
+  // CLAIM daily points
+  if (cmd === 'claim') {
+    const today = new Date().toISOString().slice(0,10);
+    if (dailyClaimed[senderID] === today) {
+      return api.sendMessage("⚠️ Nakakuha ka na ng daily points ngayon. Subukan bukas ulit.", threadID, messageID);
+    }
+
+    addUserPoints(senderID, 5);
+    dailyClaimed[senderID] = today;
+
+    return api.sendMessage("🎉 Nakakuha ka ng 5 daily points! Salamat sa paggamit ng assistant.", threadID, messageID);
   }
 
-  const feedback = args.slice(1).join(' ').trim();
+  // RATING input (1-5)
+  if (!isNaN(cmd)) {
+    const rating = parseInt(cmd);
+    if (rating < 1 || rating > 5) {
+      return api.sendMessage("❌ Ang rating ay dapat nasa pagitan ng 1 hanggang 5.", threadID, messageID);
+    }
 
-  if (!ratingsData[senderID]) {
-    ratingsData[senderID] = {
-      ratings: [],
-      feedbacks: [],
-      totalQuestions: 0
-    };
+    if (!ratingsData[senderID]) {
+      ratingsData[senderID] = {
+        ratings: [],
+        totalQuestions: 0
+      };
+    }
+    ratingsData[senderID].ratings.push(rating);
+    ratingsData[senderID].totalQuestions += 1;
+
+    addLog('rating', senderID, `Nag-rate ng ${rating} stars`);
+    addUserPoints(senderID, rating * 0.2); // Reward points based on rating
+    await notifyTopUser(api);
+
+    return api.sendMessage(`✅ Salamat sa pag-rate ng ${rating} star(s)!`, threadID, messageID);
   }
 
-  ratingsData[senderID].ratings.push(rating);
-  if (feedback.length > 0) ratingsData[senderID].feedbacks.push(feedback);
-  ratingsData[senderID].totalQuestions++;
-
-  addLog('rating', senderID, `Rating: ${rating}, Feedback: ${feedback || "Walang feedback"}`);
-
-  const stars = '⭐'.repeat(rating) + '☆'.repeat(5 - rating);
-
-  const reply = 
-    `🌟 **Salamat sa iyong rating!** 🌟\n\n` +
-    `⭐ **Rating mo:** ${stars} (${rating}/5)\n` +
-    (feedback.length > 0 ? `💬 **Feedback mo:** "${feedback}"\n\n` : '') +
-    `📊 **Tanong mo ngayon ay #${ratingsData[senderID].totalQuestions} sa Llama Assistant!**\n\n` +
-    `🚀 Gamitin ang \`llamaa <iyong mensahe>\` para magpatuloy sa pag-chat!`;
-
-  return api.sendMessage(reply, threadID, messageID);
+  // Default fallback
+  return api.sendMessage("❌ Hindi maintindihan ang command. Paki-check ang help gamit ang walang argument.", threadID, messageID);
 };
