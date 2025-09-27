@@ -1,11 +1,11 @@
 const axios = require('axios');
 
 module.exports.config = {
-  name: 'llamaa',
+  name: 'ai',
   version: '1.2.0',
   hasPermission: 0,
   usePrefix: true,
-  aliases: ['llama', 'llama'],
+  aliases: ['ai', 'llama'],
   description: "Chat with LLaMA 90B AI model",
   usages: "llama90 <your message>",
   credits: 'MANUELSON + LLaMA 3 + Meta AI',
@@ -20,7 +20,7 @@ module.exports.run = async function({ api, event, args }) {
 
   if (!input) {
     return api.sendMessage(
-      "❓ 𝗣𝗮𝗸𝗶𝗹𝗮𝗴𝗮𝘆 𝗮𝗻𝗴 𝗶𝘆𝗼𝗻𝗴 𝘁𝗮𝗻𝗼𝗻𝗴 𝗼 𝗺𝗲𝘀𝘀𝗮𝗵𝗲.\n\n📌 𝗚𝗮𝗺𝗶𝘁: llama90 <prompt>\n🧠 𝗛𝗮𝗹: llama90 Ano ang AI?",
+      "❓ 𝗣𝗮𝗸𝗶𝗹𝗮𝗴𝗮𝘆 𝗮𝗻𝗴 𝗶𝘆𝗼𝗻𝗴 𝘁𝗮𝗻𝗼𝗻𝗴 𝗼 𝗺𝗲𝘀𝘀𝗮𝗵𝗲.\n\n📌 𝗚𝗮𝗺𝗶𝘁: ai <prompt>\n🧠 𝗛𝗮𝗹: ai Ano ang AI?",
       threadID,
       messageID
     );
