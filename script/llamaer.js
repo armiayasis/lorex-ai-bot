@@ -1,16 +1,17 @@
+// ... keep your imports at the top
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
 
 module.exports.config = {
   name: "lllama",
-  version: "4.0.0",
+  version: "4.1.0",
   hasPermission: 0,
   usePrefix: true,
-  aliases: ["llama", "edit", "generate", "poli", "remini", "enhance", "rem"],
-  description: "AI toolbox: LLaMA chat, Ghibli art, AI art, and image enhancement",
-  usages: "llama <generate|edit|poli|remini>",
-  credits: "MANUELSON + Rômeo + Pollinations + LorexAi + OpenAI",
+  aliases: ["llama", "edit", "generate", "poli", "remini", "enhance", "rem", "uid", "id"],
+  description: "AI toolbox: LLaMA chat, Ghibli art, AI art, image enhancement, and UID checker",
+  usages: "llama <generate|edit|poli|remini|uid>",
+  credits: "MANUELSON + Rômeo + Pollinations + LorexAi + OpenAI + Llama",
   cooldowns: 0
 };
 
@@ -18,6 +19,11 @@ module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID, messageReply } = event;
   const subcommand = args[0];
   const input = args.slice(1).join(" ");
+
+  // === 📇 llama uid
+  if (subcommand === "uid" || subcommand === "id") {
+    return api.sendMessage(`🪪 𝗬𝗼𝘂𝗿 𝗨𝗜𝗗: ${senderID}`, threadID, messageID);
+  }
 
   // === 🧠 llama generate
   if (subcommand === "generate") {
@@ -141,13 +147,14 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
-  // === ❓ Unknown subcommand
+  // === ❓ Unknown subcommand or no subcommand
   return api.sendMessage(
     `🧠 LLlaMA AI Toolkit Help:\n\n` +
-    `📌 lllama generate <text> - chat with LLaMA\n` +
-    `🎨 lllama edit (reply) - Ghibli-style art\n` +
-    `🖼️ lllama poli <prompt> - AI art from prompt\n` +
-    `🧼 lllama remini (reply) - enhance image\n`,
+    `📌 llama generate <text> – Chat with LLaMA\n` +
+    `🎨 llama edit (reply) – Ghibli-style art\n` +
+    `🖼️ llama poli <prompt> – Generate AI art\n` +
+    `🧼 llama remini (reply) – Enhance image\n` +
+    `🪪 llama uid – Show your Facebook UID\n`,
     threadID,
     messageID
   );
