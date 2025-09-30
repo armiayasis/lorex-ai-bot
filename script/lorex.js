@@ -38,7 +38,7 @@ function getCurrentPHTime() {
 const responseOpener = "𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁";
 
 module.exports.config = {
-  name: 'ai',
+  name: 'lorexai',
   version: '2.0.0',
   hasPermission: 0,
   usePrefix: false,
