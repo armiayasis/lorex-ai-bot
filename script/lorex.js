@@ -1,14 +1,22 @@
 const axios = require('axios');
 
+// Track per-user message usage
+const userUsage = {}; // Format: { [uid]: remainingMessages }
+
+const MAX_USAGE = 300;
+
 const bannedWords = [
   "fuck", "shit", "bitch", "asshole", "damn", "crap", "dick", "piss",
   "putang ina", "pakyu", "gago", "tangina", "joder", "tarantado", "ulol",
-  " gago", "tanga", "paasa", "tanginamo", "gaga", "ulol", "bobo", "leche",
+  "gago", "tanga", "paasa", "tanginamo", "gaga", "bobo", "leche",
 ];
 
 function containsBannedWord(text) {
   const lowerText = text.toLowerCase();
-  return bannedWords.some(word => lowerText.includes(word));
+  return bannedWords.some(word => {
+    const regex = new RegExp(`\\b${word.trim()}\\b`, 'i');
+    return regex.test(lowerText);
+  });
 }
 
 function convertToBold(text) {
@@ -23,17 +31,20 @@ function convertToBold(text) {
   return text.split('').map(char => boldMap[char] || char).join('');
 }
 
-const responseOpeners = [
-  "𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁"
-];
+function getCurrentPHTime() {
+  const options = { timeZone: 'Asia/Manila', hour12: true, hour: 'numeric', minute: 'numeric', second: 'numeric' };
+  return new Date().toLocaleTimeString('en-PH', options);
+}
+
+const responseOpener = "𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁";
 
 module.exports.config = {
-  name: 'ai',
-  version: '1.0.0',
+  name: 'lorexao',
+  version: '1.1.0',
   hasPermission: 0,
   usePrefix: false,
-  aliases: ['lorexai', 'lorex', 'ai'],
-  description: "AI command powered by Lorex AI Personal",
+  aliases: ['ai', 'lorex', 'ai'],
+  description: "AI command powered by Lorex AI",
   usages: "lorexai [prompt]",
   credits: 'LorexAi',
   cooldowns: 0
@@ -50,12 +61,12 @@ async function sendTemp(api, threadID, message) {
 
 async function callLorexPersonalAPI(prompt, uid) {
   try {
-    const { data } = await axios.get('https://daikyu-api.up.railway.app/api/lorex-ai-personal', {
+    const { data } = await axios.get('https://daikyu-api.up.railway.app/api/lorex-ai', {
       params: { ask: prompt, uid }
     });
     return data?.response || null;
   } catch (error) {
-    console.error('Error calling Lorex AI Personal:', error.message);
+    console.error('Error calling Lorex AI:', error.message);
     return null;
   }
 }
@@ -66,15 +77,34 @@ module.exports.run = async function({ api, event, args }) {
   const threadID = event.threadID;
   const messageID = event.messageID;
 
-  if (!input) {
-    return api.sendMessage("Please type your question or command.", threadID, messageID);
+  // Initialize user usage if not exists
+  if (!userUsage[uid]) userUsage[uid] = MAX_USAGE;
+
+  // Handle reset
+  if (input.toLowerCase() === "reset") {
+    userUsage[uid] = MAX_USAGE;
+    return api.sendMessage("✅ Your usage has been reset to 300/300.", threadID, messageID);
   }
 
+  // Handle empty input
+  if (!input) {
+    return api.sendMessage("❗ Please type your question or command.", threadID, messageID);
+  }
+
+  // Check for banned words
   if (containsBannedWord(input)) {
     return api.sendMessage("⚠️ Your prompt contains inappropriate language. Please rephrase and try again.", threadID, messageID);
   }
 
-  const tempMsg = await sendTemp(api, threadID, "⏳𝗟𝗼𝗿𝗲𝘅-𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗚𝗲𝗻𝗲𝗿𝗮𝘁𝗶𝗻𝗴...");
+  // Check usage limit
+  if (userUsage[uid] <= 0) {
+    return api.sendMessage("🚫 You have reached your daily usage limit (0/300). Type `reset` to reset your usage.", threadID, messageID);
+  }
+
+  // Subtract usage
+  userUsage[uid]--;
+
+  const tempMsg = await sendTemp(api, threadID, "⏳ 𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁 𝗶𝘀 𝗴𝗲𝗻𝗲𝗿𝗮𝘁𝗶𝗻𝗴...");
 
   const response = await callLorexPersonalAPI(input, uid);
 
@@ -89,6 +119,10 @@ module.exports.run = async function({ api, event, args }) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
-  return api.editMessage(`${opener}\n\n${formatted}`, tempMsg.messageID, threadID);
+  const time = getCurrentPHTime();
+  const usage = `${userUsage[uid]}/${MAX_USAGE}`;
+
+  const finalMessage = `${responseOpener}\n🕒 ${time} | 🟢 ${usage} messages remaining\n\n${formatted}`;
+
+  return api.editMessage(finalMessage, tempMsg.messageID, threadID);
 };
