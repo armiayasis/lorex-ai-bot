@@ -2,7 +2,6 @@ const axios = require('axios');
 
 // Track per-user message usage
 const userUsage = {}; // Format: { [uid]: remainingMessages }
-
 const MAX_USAGE = 300;
 
 const bannedWords = [
@@ -40,16 +39,17 @@ const responseOpener = "𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀�
 
 module.exports.config = {
   name: 'ai',
-  version: '1.1.0',
+  version: '2.0.0',
   hasPermission: 0,
   usePrefix: false,
-  aliases: ['ai', 'lorex', 'ai'],
-  description: "AI command powered by Lorex AI",
+  aliases: ['ai', 'lorex', 'lorexai'],
+  description: "AI command powered by Lorex AI with image analysis",
   usages: "lorexai [prompt]",
-  credits: 'LorexAi',
+  credits: 'LorexAi + You',
   cooldowns: 0
 };
 
+// TEMP message sender
 async function sendTemp(api, threadID, message) {
   return new Promise((resolve, reject) => {
     api.sendMessage(message, threadID, (err, info) => {
@@ -59,6 +59,7 @@ async function sendTemp(api, threadID, message) {
   });
 }
 
+// Lorex AI API call
 async function callLorexPersonalAPI(prompt, uid) {
   try {
     const { data } = await axios.get('https://daikyu-api.up.railway.app/api/lorex-ai', {
@@ -71,42 +72,73 @@ async function callLorexPersonalAPI(prompt, uid) {
   }
 }
 
-module.exports.run = async function({ api, event, args }) {
+// 🧠 Image caption + OCR analyzer
+async function analyzeImage(url) {
+  try {
+    const { data } = await axios.get('https://daikyu-api.up.railway.app/api/image-all', {
+      params: { image: url }
+    });
+
+    const caption = data?.caption || 'No caption found.';
+    const ocr = data?.text || 'No readable text found.';
+
+    return { caption, ocr };
+  } catch (err) {
+    console.error('Image analysis error:', err.message);
+    return null;
+  }
+}
+
+// MAIN FUNCTION
+module.exports.run = async function ({ api, event, args }) {
   const input = args.join(' ').trim();
   const uid = event.senderID;
   const threadID = event.threadID;
   const messageID = event.messageID;
+  const attachments = event.messageReply?.attachments || event.attachments;
 
-  // Initialize user usage if not exists
   if (!userUsage[uid]) userUsage[uid] = MAX_USAGE;
 
-  // Handle reset
   if (input.toLowerCase() === "reset") {
     userUsage[uid] = MAX_USAGE;
     return api.sendMessage("✅ Your usage has been reset to 300/300.", threadID, messageID);
   }
 
-  // Handle empty input
-  if (!input) {
-    return api.sendMessage("❗ Please type your question or command.", threadID, messageID);
+  if (!input && attachments.length === 0) {
+    return api.sendMessage("❗ Please type your question or send an image.", threadID, messageID);
   }
 
-  // Check for banned words
-  if (containsBannedWord(input)) {
+  if (input && containsBannedWord(input)) {
     return api.sendMessage("⚠️ Your prompt contains inappropriate language. Please rephrase and try again.", threadID, messageID);
   }
 
-  // Check usage limit
   if (userUsage[uid] <= 0) {
     return api.sendMessage("🚫 You have reached your daily usage limit (0/300). Type `reset` to reset your usage.", threadID, messageID);
   }
 
-  // Subtract usage
   userUsage[uid]--;
 
-  const tempMsg = await sendTemp(api, threadID, "⏳ 𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁 𝗶𝘀 𝗴𝗲𝗻𝗲𝗿𝗮𝘁𝗶𝗻𝗴...");
+  const tempMsg = await sendTemp(api, threadID, "⏳ 𝗣𝗲𝗿𝘀𝗼𝗻𝗮𝗹 𝗔𝘀𝘀𝗶𝘀𝘁𝗮𝗻𝘁 𝗶𝘀 𝗽𝗿𝗼𝗰𝗲𝘀𝘀𝗶𝗻𝗴...");
 
-  const response = await callLorexPersonalAPI(input, uid);
+  let finalPrompt = input;
+
+  // If image exists, analyze it
+  if (attachments.length > 0 && attachments[0]?.type === 'photo') {
+    const imageUrl = attachments[0].url;
+    const analysis = await analyzeImage(imageUrl);
+
+    if (!analysis) {
+      return api.editMessage("⚠️ Failed to analyze image. Please try again later.", tempMsg.messageID, threadID);
+    }
+
+    const { caption, ocr } = analysis;
+
+    finalPrompt = input
+      ? `${input}\n\nImage description: ${caption}\nExtracted text: ${ocr}`
+      : `Describe and interpret this image.\n\nImage description: ${caption}\nExtracted text: ${ocr}`;
+  }
+
+  const response = await callLorexPersonalAPI(finalPrompt, uid);
 
   if (!response) {
     return api.editMessage("⚠️ There was a problem retrieving the answer. Please try again later.", tempMsg.messageID, threadID);
