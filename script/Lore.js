@@ -45,11 +45,11 @@ async function sendTemp(api, threadID, message) {
 }
 
 module.exports.config = {
-  name: 'lorex',
+  name: 'ai',
   version: '2.0.1',
   hasPermission: 0,
   usePrefix: false,
-  aliases: ['lorexai', 'assistant', 'lpa'],
+  aliases: ['ai', 'lore', 'ai'],
   description: "LOREX PERSONAL ASSISTANT powered by GPT-5 + Gemini",
   usages: "lorex [your question]",
   credits: 'LorexAi',
@@ -98,15 +98,8 @@ module.exports.run = async function({ api, event, args, permission }) {
   }
 
   const timePH = getPHTime();
-  const timeBox = `🕒 𝗧𝗶𝗺𝗲 (𝗣𝗛): ${timePH}`;
-  const usageInfo = permission === 0 ? `📊 𝗨𝘀𝗮𝗴𝗲: ${userUsage[uid]?.count}/${USAGE_LIMIT}` : '';
-
-  const poweredBy = `
-╔══════════════════════════════╗
-║ 🤖 LOREX PERSONAL ASSISTANT ║
-║ 🔵 Powered by GPT-5 + Aria Ai║
-╚══════════════════════════════╝
-`.trim();
+  const usageInfo = permission === 0 ? `📊 Usage: ${userUsage[uid]?.count}/${USAGE_LIMIT}` : '';
+  const poweredBy = "🔷 Powered by Lorex AI";
 
   // If replying to image
   const isPhotoReply = event.type === "message_reply"
@@ -127,11 +120,18 @@ module.exports.run = async function({ api, event, args, permission }) {
 
       if (data?.result) {
         const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
-        return api.editMessage(
-          `${opener}\n\n${data.result}\n\n${timeBox}\n${usageInfo}\n\n${poweredBy}`,
-          tempMsg.messageID,
-          threadID
-        );
+        const finalMessage = [
+          opener,
+          '',
+          data.result,
+          '',
+          `🕒 Time (PH): ${timePH}`,
+          usageInfo,
+          '',
+          poweredBy
+        ].filter(Boolean).join('\n');
+
+        return api.editMessage(finalMessage, tempMsg.messageID, threadID);
       }
 
       return api.editMessage("⚠️ Unexpected response from Gemini Vision API.", tempMsg.messageID, threadID);
@@ -165,11 +165,18 @@ module.exports.run = async function({ api, event, args, permission }) {
 
     const opener = responseOpeners[Math.floor(Math.random() * responseOpeners.length)];
 
-    return api.editMessage(
-      `${opener}\n\n${formatted}\n\n${timeBox}\n${usageInfo}\n\n${poweredBy}`,
-      tempMsg.messageID,
-      threadID
-    );
+    const finalMessage = [
+      opener,
+      '',
+      formatted,
+      '',
+      `🕒 Time (PH): ${timePH}`,
+      usageInfo,
+      '',
+      poweredBy
+    ].filter(Boolean).join('\n');
+
+    return api.editMessage(finalMessage, tempMsg.messageID, threadID);
 
   } catch (err) {
     console.error(err);
