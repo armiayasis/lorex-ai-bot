@@ -28,7 +28,7 @@ module.exports.run = async function({ api, event, args }) {
 
   if (!input) {
     return api.sendMessage(
-      "❌ Please enter a prompt.\nExample: aria who are you?", 
+      "Hello! I'm Aria, your friendly AI assistant. How can I help you today? Let's explore some interesting topics together!", 
       threadID, 
       event.messageID
     );
