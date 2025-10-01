@@ -1,14 +1,14 @@
 const axios = require("axios");
 
 module.exports.config = {
-  name: "ariaai",
+  name: "opera",
   version: "1.0",
   hasPermission: 0,
   usePrefix: false,
   aliases: [],
   description: "Ask Aria any question using external AI API.",
-  usages: "aria <question>",
-  cooldowns: 2,
+  usages: "opera <question>",
+  cooldowns: 0,
 };
 
 module.exports.run = async function ({ api, event, args }) {
