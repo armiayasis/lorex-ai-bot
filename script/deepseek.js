@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 // Admin user ID who can toggle and ban/unban/kick
-const ADMIN_ID = "1"; // Replace with actual admin ID
+const ADMIN_ID = "61580959514473"; // Replace with actual admin ID
 
 // Paths for persistent storage
 const BAN_LIST_PATH = path.join(__dirname, "deepseek_banlist.json");
