@@ -1,1 +1,86 @@
-{}
+{
+  "updatedAt": 1759676704935,
+  "items": [
+    {
+      "id": "fruit-apple",
+      "name": "Apple",
+      "rarity": "common",
+      "category": "fruit",
+      "currentPrice": 120,
+      "currentStock": 10,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-banana",
+      "name": "Banana",
+      "rarity": "common",
+      "category": "fruit",
+      "currentPrice": 90,
+      "currentStock": 8,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-orange",
+      "name": "Orange",
+      "rarity": "common",
+      "category": "fruit",
+      "currentPrice": 100,
+      "currentStock": 12,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-mango",
+      "name": "Mango",
+      "rarity": "uncommon",
+      "category": "fruit",
+      "currentPrice": 150,
+      "currentStock": 6,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-grapes",
+      "name": "Grapes",
+      "rarity": "uncommon",
+      "category": "fruit",
+      "currentPrice": 160,
+      "currentStock": 7,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-pineapple",
+      "name": "Pineapple",
+      "rarity": "rare",
+      "category": "fruit",
+      "currentPrice": 200,
+      "currentStock": 4,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-strawberry",
+      "name": "Strawberry",
+      "rarity": "rare",
+      "category": "fruit",
+      "currentPrice": 180,
+      "currentStock": 5,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-watermelon",
+      "name": "Watermelon",
+      "rarity": "rare",
+      "category": "fruit",
+      "currentPrice": 220,
+      "currentStock": 3,
+      "earning": 680,
+      "history": []
+    },
+    {
+      "id": "fruit-papaya",
+      "name": "Pap
