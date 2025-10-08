@@ -3,47 +3,34 @@ const fs = require("fs");
 const path = require("path");
 
 const activeThreads = new Set();
-const bannedFilePath = path.join(__dirname, "bannedUsers.json");
 const configFilePath = path.join(__dirname, "operaConfig.json");
 
-// Load banned users from file
-let bannedUsers = [];
-if (fs.existsSync(bannedFilePath)) {
-  try {
-    bannedUsers = JSON.parse(fs.readFileSync(bannedFilePath, "utf8"));
-  } catch {
-    bannedUsers = [];
-  }
-}
-
-// Load opera config (for admin-only toggle)
-let operaConfig = { adminOnly: false };
+// Load config (for admin-only and maintenance toggles)
+let operaConfig = { adminOnly: false, maintenance: false };
 if (fs.existsSync(configFilePath)) {
   try {
     operaConfig = JSON.parse(fs.readFileSync(configFilePath, "utf8"));
   } catch {
-    operaConfig = { adminOnly: false };
+    operaConfig = { adminOnly: false, maintenance: false };
   }
-}
-
-function saveBannedUsers() {
-  fs.writeFileSync(bannedFilePath, JSON.stringify(bannedUsers, null, 2));
 }
 
 function saveOperaConfig() {
   fs.writeFileSync(configFilePath, JSON.stringify(operaConfig, null, 2));
 }
 
+const OWNER_UID = "61580959514473";
+
 module.exports.config = {
   name: "opera",
-  version: "4.7",
+  version: "5.0",
   hasPermission: 0,
   usePrefix: false,
   aliases: ["op", "aria", "sp"],
   description:
-    "Ask Aria, play music, manage bans, analyze images, kick users, and toggle admin-only access.",
+    "Ask Aria, play music, analyze images, kick users, toggle admin-only and maintenance modes.",
   usages:
-    "opera <question> | opera spotify <song> | opera ban/unban (reply) | opera banned list | opera unbanall | opera analyze image (reply) | opera kick (reply) | opera on/off",
+    "opera <question> | opera spotify <song> | opera analyze image (reply) | opera kick (reply) | opera admin only on/off | opera maintenance on/off",
   cooldowns: 0,
   credits: "GPT-5 + You",
 };
@@ -56,11 +43,16 @@ async function analyzeImage(imagePath) {
 
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID, messageReply } = event;
-  const input = args.join(" ").trim().toLowerCase();
+  const inputRaw = args.join(" ").trim();
+  const input = inputRaw.toLowerCase();
 
   async function isAdmin(uid) {
-    const threadInfo = await api.getThreadInfo(threadID);
-    return threadInfo.adminIDs.some((admin) => admin.id === uid);
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      return threadInfo.adminIDs.some((admin) => admin.id === uid);
+    } catch {
+      return false;
+    }
   }
 
   async function getUserName(uid) {
@@ -72,47 +64,39 @@ module.exports.run = async function ({ api, event, args }) {
     }
   }
 
-  // If admin-only mode enabled, only allow admins
+  // Maintenance mode check: only owner can use bot if enabled
+  if (operaConfig.maintenance && senderID !== OWNER_UID) {
+    return api.sendMessage(
+      "⚠️ Bot is currently under maintenance. Please try again later.",
+      threadID,
+      messageID
+    );
+  }
+
+  // Admin-only mode check
   if (operaConfig.adminOnly) {
     const senderIsAdmin = await isAdmin(senderID);
-    if (!senderIsAdmin)
+    if (!senderIsAdmin) {
       return api.sendMessage(
         "❗ Opera is currently restricted to admins only.",
         threadID,
         messageID
       );
+    }
   }
 
-  // Check banned
-  if (bannedUsers.includes(senderID))
+  // Admin commands only for owner
+  const ownerCommands = ["admin only on", "admin only off", "maintenance on", "maintenance off"];
+  if (ownerCommands.includes(input) && senderID !== OWNER_UID) {
     return api.sendMessage(
-      "🚫 You are banned from using opera.",
+      "❗ Only the owner can use this command.",
       threadID,
       messageID
     );
-
-  // Admin commands list
-  const adminCommands = [
-    "ban",
-    "unban",
-    "banned list",
-    "unbanall",
-    "kick",
-    "on",
-    "off",
-  ];
-  if (adminCommands.includes(input)) {
-    const senderIsAdmin = await isAdmin(senderID);
-    if (!senderIsAdmin)
-      return api.sendMessage(
-        "❗ Only group admins can use this command.",
-        threadID,
-        messageID
-      );
   }
 
   // Toggle admin-only mode
-  if (input === "on") {
+  if (input === "admin only on") {
     operaConfig.adminOnly = true;
     saveOperaConfig();
     return api.sendMessage(
@@ -121,8 +105,7 @@ module.exports.run = async function ({ api, event, args }) {
       messageID
     );
   }
-
-  if (input === "off") {
+  if (input === "admin only off") {
     operaConfig.adminOnly = false;
     saveOperaConfig();
     return api.sendMessage(
@@ -132,71 +115,24 @@ module.exports.run = async function ({ api, event, args }) {
     );
   }
 
-  // Ban user (reply)
-  if (input === "ban") {
-    if (!messageReply)
-      return api.sendMessage(
-        "❗ Please reply to the user you want to ban.",
-        threadID,
-        messageID
-      );
-
-    const targetID = messageReply.senderID;
-    if (bannedUsers.includes(targetID))
-      return api.sendMessage("⚠️ That user is already banned.", threadID, messageID);
-
-    bannedUsers.push(targetID);
-    saveBannedUsers();
-
-    const name = await getUserName(targetID);
+  // Toggle maintenance mode
+  if (input === "maintenance on") {
+    operaConfig.maintenance = true;
+    saveOperaConfig();
     return api.sendMessage(
-      `✅ ${name} has been banned from using opera.`,
+      "🛠️ Maintenance mode activated. Only the owner can use Opera now.",
       threadID,
       messageID
     );
   }
-
-  // Unban user (reply)
-  if (input === "unban") {
-    if (!messageReply)
-      return api.sendMessage(
-        "❗ Please reply to the user you want to unban.",
-        threadID,
-        messageID
-      );
-
-    const targetID = messageReply.senderID;
-    if (!bannedUsers.includes(targetID))
-      return api.sendMessage("⚠️ That user is not banned.", threadID, messageID);
-
-    bannedUsers = bannedUsers.filter((id) => id !== targetID);
-    saveBannedUsers();
-
-    const name = await getUserName(targetID);
-    return api.sendMessage(`✅ ${name} has been unbanned.`, threadID, messageID);
-  }
-
-  // Show banned list
-  if (input === "banned list") {
-    if (bannedUsers.length === 0)
-      return api.sendMessage("✅ No users are currently banned.", threadID, messageID);
-
-    let listMsg = `🚫 Banned Users:\n`;
-    for (let i = 0; i < bannedUsers.length; i++) {
-      const name = await getUserName(bannedUsers[i]);
-      listMsg += `${i + 1}. ${name} (UID: ${bannedUsers[i]})\n`;
-    }
-    return api.sendMessage(listMsg.trim(), threadID, messageID);
-  }
-
-  // Unban all
-  if (input === "unbanall") {
-    if (bannedUsers.length === 0)
-      return api.sendMessage("✅ No users to unban.", threadID, messageID);
-
-    bannedUsers = [];
-    saveBannedUsers();
-    return api.sendMessage("✅ All users have been unbanned.", threadID, messageID);
+  if (input === "maintenance off") {
+    operaConfig.maintenance = false;
+    saveOperaConfig();
+    return api.sendMessage(
+      "🛠️ Maintenance mode deactivated. Opera is available to all permitted users.",
+      threadID,
+      messageID
+    );
   }
 
   // Kick user (reply)
@@ -276,9 +212,9 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
-  // Music play command
+  // Music play command (spotify, music, play)
   if (/^(spotify|music|play)\s+/i.test(input)) {
-    const songTitle = input.replace(/^(spotify|music|play)\s+/i, "");
+    const songTitle = inputRaw.replace(/^(spotify|music|play)\s+/i, "").trim();
 
     if (!songTitle) {
       return api.sendMessage("❗ Usage: opera spotify [song title]", threadID, messageID);
@@ -344,10 +280,21 @@ module.exports.run = async function ({ api, event, args }) {
     return;
   }
 
-  // Default fallback for unrecognized commands/questions
-  // You can replace this with Aria AI API or other logic
+  // Default: Use Aria AI from your API link
+  try {
+    const encodedQuestion = encodeURIComponent(inputRaw);
+    const apiUrl = `https://kaiz-apis.gleeze.com/api/aria?ask=${encodedQuestion}&uid=${OWNER_UID}&apikey=585674da-1b3b-4eed-bb58-13710096c461`;
+
+    const response = await axios.get(apiUrl);
+    if (response.data && response.data.response) {
+      return api.sendMessage(response.data.response.trim(), threadID, messageID);
+    }
+  } catch (err) {
+    console.error("❌ Aria API error:", err);
+  }
+
   return api.sendMessage(
-    "🤖 Opera ready! Use commands like `opera spotify <song>`, `opera ban` (reply), `opera kick` (reply), or `opera on/off` to manage.",
+    "🤖 Opera ready! Use commands like `opera spotify <song>`, `opera analyze image` (reply), `opera kick` (reply), `opera admin only on/off`, `opera maintenance on/off`.",
     threadID,
     messageID
   );
