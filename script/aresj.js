@@ -1,301 +1,102 @@
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
 
-const activeThreads = new Set();
-const configFilePath = path.join(__dirname, "operaConfig.json");
+const axios = require('axios');
 
-// Load config (for admin-only and maintenance toggles)
-let operaConfig = { adminOnly: false, maintenance: false };
-if (fs.existsSync(configFilePath)) {
-  try {
-    operaConfig = JSON.parse(fs.readFileSync(configFilePath, "utf8"));
-  } catch {
-    operaConfig = { adminOnly: false, maintenance: false };
-  }
+function getPHTime() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const phTime = new Date(utc + 8 * 3600000);
+  const h = phTime.getHours(), m = phTime.getMinutes();
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${hour12}:${m < 10 ? '0' + m : m} ${ampm}`;
 }
-
-function saveOperaConfig() {
-  fs.writeFileSync(configFilePath, JSON.stringify(operaConfig, null, 2));
-}
-
-const OWNER_UID = "61580959514473";
 
 module.exports.config = {
-  name: "opera",
-  version: "5.0",
+  name: 'opera',
+  version: '1.0.5', // updated version
   hasPermission: 0,
   usePrefix: false,
-  aliases: ["op", "aria", "sp"],
-  description:
-    "Ask Aria, play music, analyze images, kick users, toggle admin-only and maintenance modes.",
-  usages:
-    "opera <question> | opera spotify <song> | opera analyze image (reply) | opera kick (reply) | opera admin only on/off | opera maintenance on/off",
-  cooldowns: 0,
-  credits: "GPT-5 + You",
+  aliases: ['opera'],
+  description: "Chat with Aria AI (via Kaiz API) with personality",
+  usages: "aria [your question]",
+  cooldowns: 0
 };
 
-async function analyzeImage(imagePath) {
-  const stats = fs.statSync(imagePath);
-  const sizeKB = (stats.size / 1024).toFixed(2);
-  return `🖼️ Image Analysis:\n- Size: ${sizeKB} KB\n- Path: ${imagePath}`;
-}
+module.exports.run = async function({ api, event, args }) {
+  const input = args.join(' ').trim();
+  const uid = event.senderID;
+  const threadID = event.threadID;
+  const apikey = "585674da-1b3b-4eed-bb58-13710096c461";
 
-module.exports.run = async function ({ api, event, args }) {
-  const { threadID, messageID, senderID, messageReply } = event;
-  const inputRaw = args.join(" ").trim();
-  const input = inputRaw.toLowerCase();
-
-  async function isAdmin(uid) {
-    try {
-      const threadInfo = await api.getThreadInfo(threadID);
-      return threadInfo.adminIDs.some((admin) => admin.id === uid);
-    } catch {
-      return false;
-    }
-  }
-
-  async function getUserName(uid) {
-    try {
-      const user = await api.getUserInfo(uid);
-      return user[uid]?.name || "Unknown User";
-    } catch {
-      return "Unknown User";
-    }
-  }
-
-  // Maintenance mode check: only owner can use bot if enabled
-  if (operaConfig.maintenance && senderID !== OWNER_UID) {
+  // Greeting if no question
+  if (!input) {
     return api.sendMessage(
-      "⚠️ Bot is currently under maintenance. Please try again later.",
+      "Hello! 😊 I'm Aria, your friendly AI assistant. You can ask me anything — from fun facts to deep thoughts. What’s on your mind today?",
       threadID,
-      messageID
+      event.messageID
     );
   }
 
-  // Admin-only mode check
-  if (operaConfig.adminOnly) {
-    const senderIsAdmin = await isAdmin(senderID);
-    if (!senderIsAdmin) {
-      return api.sendMessage(
-        "❗ Opera is currently restricted to admins only.",
-        threadID,
-        messageID
-      );
-    }
-  }
-
-  // Admin commands only for owner
-  const ownerCommands = ["admin only on", "admin only off", "maintenance on", "maintenance off"];
-  if (ownerCommands.includes(input) && senderID !== OWNER_UID) {
-    return api.sendMessage(
-      "❗ Only the owner can use this command.",
-      threadID,
-      messageID
-    );
-  }
-
-  // Toggle admin-only mode
-  if (input === "admin only on") {
-    operaConfig.adminOnly = true;
-    saveOperaConfig();
-    return api.sendMessage(
-      "✅ Opera is now restricted to admins only.",
-      threadID,
-      messageID
-    );
-  }
-  if (input === "admin only off") {
-    operaConfig.adminOnly = false;
-    saveOperaConfig();
-    return api.sendMessage(
-      "✅ Opera is now available to all users.",
-      threadID,
-      messageID
-    );
-  }
-
-  // Toggle maintenance mode
-  if (input === "maintenance on") {
-    operaConfig.maintenance = true;
-    saveOperaConfig();
-    return api.sendMessage(
-      "🛠️ Maintenance mode activated. Only the owner can use Opera now.",
-      threadID,
-      messageID
-    );
-  }
-  if (input === "maintenance off") {
-    operaConfig.maintenance = false;
-    saveOperaConfig();
-    return api.sendMessage(
-      "🛠️ Maintenance mode deactivated. Opera is available to all permitted users.",
-      threadID,
-      messageID
-    );
-  }
-
-  // Kick user (reply)
-  if (input === "kick") {
-    if (!messageReply)
-      return api.sendMessage(
-        "❗ Please reply to the user you want to kick.",
-        threadID,
-        messageID
-      );
-
-    const targetID = messageReply.senderID;
-
-    // Prevent kicking admins
-    const isTargetAdmin = await isAdmin(targetID);
-    if (isTargetAdmin)
-      return api.sendMessage("❗ You cannot kick another admin.", threadID, messageID);
-
-    try {
-      await api.removeUserFromGroup(targetID, threadID);
-      const name = await getUserName(targetID);
-      return api.sendMessage(`✅ ${name} has been kicked from the group.`, threadID, messageID);
-    } catch (error) {
-      console.error("❌ Kick user error:", error);
-      return api.sendMessage("❌ Failed to kick the user.", threadID, messageID);
-    }
-  }
-
-  // Analyze image (reply with image)
-  if (input === "analyze image") {
-    if (!messageReply || !messageReply.attachments || messageReply.attachments.length === 0) {
-      return api.sendMessage("❗ Please reply to a message with an image attachment.", threadID, messageID);
-    }
-
-    const imageAttachment = messageReply.attachments.find(
-      (att) => att.type === "photo" || att.type === "image" || att.type === "photo_album"
-    );
-
-    if (!imageAttachment) {
-      return api.sendMessage("❗ The replied message does not contain an image.", threadID, messageID);
-    }
-
-    const imageUrl = imageAttachment.url || imageAttachment.previewUrl || imageAttachment.largePreviewUrl;
-    if (!imageUrl) return api.sendMessage("❗ Could not retrieve image URL.", threadID, messageID);
-
-    const imageFileName = path.basename(imageUrl).split("?")[0];
-    const filePath = path.join(__dirname, "cache", `${Date.now()}_${imageFileName}`);
-
-    try {
-      const response = await axios({
-        url: imageUrl,
-        method: "GET",
-        responseType: "stream",
-      });
-
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-
-      const writer = fs.createWriteStream(filePath);
-      response.data.pipe(writer);
-
-      await new Promise((resolve, reject) => {
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
-
-      const analysisResult = await analyzeImage(filePath);
-
-      await api.sendMessage(analysisResult, threadID, messageID);
-
-      fs.unlink(filePath, (err) => {
-        if (err) console.error("⚠️ Failed to delete image cache:", err);
-      });
-    } catch (err) {
-      console.error("❌ Image download or analysis error:", err);
-      return api.sendMessage("❌ Failed to download or analyze the image.", threadID, messageID);
-    }
-    return;
-  }
-
-  // Music play command (spotify, music, play)
-  if (/^(spotify|music|play)\s+/i.test(input)) {
-    const songTitle = inputRaw.replace(/^(spotify|music|play)\s+/i, "").trim();
-
-    if (!songTitle) {
-      return api.sendMessage("❗ Usage: opera spotify [song title]", threadID, messageID);
-    }
-
-    if (activeThreads.has(threadID)) {
-      return api.sendMessage(
-        "⚠️ Please wait for the current song to finish processing.",
-        threadID,
-        messageID
-      );
-    }
-
-    activeThreads.add(threadID);
-    api.setMessageReaction("⏳", messageID, () => {}, true);
-
-    try {
-      const apiUrl = `https://aryanapi.up.railway.app/api/youtubeplay?query=${encodeURIComponent(
-        songTitle
-      )}`;
-      const res = await axios.get(apiUrl);
-      const data = res.data;
-
-      if (!data || !data.status || !data.data || !data.data.audio) {
-        activeThreads.delete(threadID);
-        return api.sendMessage("❌ Failed to get music data.", threadID, messageID);
-      }
-
-      const audioUrl = data.data.audio;
-      const filePath = path.join(__dirname, "cache", `${Date.now()}_opera.mp3`);
-
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-
-      const writer = fs.createWriteStream(filePath);
-      const audioStream = await axios({
-        url: audioUrl,
-        method: "GET",
-        responseType: "stream",
-      });
-
-      audioStream.data.pipe(writer);
-
-      writer.on("finish", () => {
-        api.sendMessage(
-          { body: `🎵 Now playing: ${songTitle}`, attachment: fs.createReadStream(filePath) },
-          threadID,
-          () => {
-            try {
-              fs.unlinkSync(filePath);
-            } catch (err) {
-              console.error("⚠️ Failed to delete cache file:", err.message);
-            }
-            api.setMessageReaction("✅", messageID, () => {}, true);
-            activeThreads.delete(threadID);
-          }
-        );
-      });
-    } catch (err) {
-      activeThreads.delete(threadID);
-      api.setMessageReaction("❌", messageID, () => {}, true);
-      return api.sendMessage("❌ Error playing music.", threadID, messageID);
-    }
-    return;
-  }
-
-  // Default: Use Aria AI from your API link
   try {
-    const encodedQuestion = encodeURIComponent(inputRaw);
-    const apiUrl = `https://kaiz-apis.gleeze.com/api/aria?ask=${encodedQuestion}&uid=${OWNER_UID}&apikey=585674da-1b3b-4eed-bb58-13710096c461`;
+    // Show typing indicator
+    api.sendTypingIndicator(threadID);
 
-    const response = await axios.get(apiUrl);
-    if (response.data && response.data.response) {
-      return api.sendMessage(response.data.response.trim(), threadID, messageID);
+    // Send "Thinking..." message
+    const thinkingMsg = await new Promise((resolve, reject) => {
+      api.sendMessage("💭 Hmm... I'm thinking about your question...", threadID, (err, info) => {
+        if (err) reject(err);
+        else resolve(info);
+      });
+    });
+
+    // Prepare API request
+    const encodedQuery = encodeURIComponent(input);
+    const ariaApiUrl = `https://kaiz-apis.gleeze.com/api/aria?ask=${encodedQuery}&uid=${uid}&apikey=${apikey}`;
+    
+    // Call Kaiz API with 10s timeout
+    const { data } = await axios.get(ariaApiUrl, { timeout: 10000 });
+
+    if (!data || !data.response) {
+      // Remove thinking message
+      await api.unsendMessage(thinkingMsg.messageID).catch(() => {});
+      return api.sendMessage(
+        "❌ Sorry, no response from Aria AI (Kaiz API). Please try again later.",
+        threadID,
+        event.messageID
+      );
     }
-  } catch (err) {
-    console.error("❌ Aria API error:", err);
-  }
 
-  return api.sendMessage(
-    "🤖 Opera ready! Use commands like `opera spotify <song>`, `opera analyze image` (reply), `opera kick` (reply), `opera admin only on/off`, `opera maintenance on/off`.",
-    threadID,
-    messageID
-  );
+    // Delay for realism
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Delete "Thinking..." message and send final answer
+    await api.unsendMessage(thinkingMsg.messageID).catch(() => {});
+
+    const replyMsg =
+      `🟢 Aria AI\n\n` +
+      `📩 You asked:\n> ${input}\n\n` +
+      `🤖 Aria's reply:\n${data.response}\n\n` +
+      `⏰ Time: ${getPHTime()}`;
+
+    const sentMsg = await new Promise((resolve, reject) => {
+      api.sendMessage(replyMsg, threadID, (err, info) => {
+        if (err) reject(err);
+        else resolve(info);
+      });
+    });
+
+    // Auto unsend after 24 hours
+    setTimeout(() => {
+      api.unsendMessage(sentMsg.messageID).catch(() => {});
+    }, 86400000);
+
+  } catch (error) {
+    console.error(error);
+
+    return api.sendMessage(
+      "❌ Oops! Something went wrong while connecting to Aria API. Please try again later.",
+      threadID,
+      event.messageID
+    );
+  }
 };
